@@ -351,8 +351,20 @@ footer { text-align: center; margin-top: 60px; font-size: 13px; color: var(--mut
 .global-drag-text {
   font-size: 28px; font-weight: 700; color: #fff; text-align: center;
   background: var(--sur); padding: 32px 48px; border-radius: var(--rad);
-  box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(0,0,0,0.1);
 }
+
+/* AUTH SCREENS */
+.auth-screen { position: fixed; inset: 0; z-index: 600; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.auth-panel { background: var(--sur); padding: 40px; border-radius: var(--rad); box-shadow: 0 10px 30px rgba(0,0,0,0.05); width: 100%; max-width: 400px; text-align: center; border: 1px solid var(--bdr); }
+.auth-input { width: 100%; padding: 12px 14px; border: 1px solid var(--bdr); border-radius: var(--rad-sm); background: var(--bg); color: var(--txt); font-family: inherit; margin-bottom: 16px; font-size: 14px; transition: border-color 0.2s; }
+.auth-input:focus { outline: none; border-color: var(--acc); }
+.auth-label { font-size: 12px; font-weight: 600; color: var(--mut); margin-bottom: 6px; display: block; text-align: left; }
+.auth-btn { flex: 1; padding: 12px; border-radius: var(--rad-sm); font-weight: 600; cursor: pointer; border: none; font-size: 14px; transition: all 0.2s; }
+.auth-btn.primary { background: var(--acc); color: #fff; }
+.auth-btn.primary:hover { background: #4338ca; }
+.auth-btn.secondary { background: var(--bg); color: var(--txt); border: 1px solid var(--bdr); }
+.auth-btn.secondary:hover { background: rgba(0,0,0,0.04); }
 </style>
 </head>
 <body>
@@ -367,7 +379,10 @@ footer { text-align: center; margin-top: 60px; font-size: 13px; color: var(--mut
     <button class="ntab" onclick="switchPage('p2',this)">APPLE PRODUCTS</button>
   </div>
   <div class="nav-period" id="nav-period">APRIL 2026</div>
-  <button class="btn-upload-nav" style="margin-left:10px;" onclick="openUpload()">⬆ อัพโหลดไฟล์ใหม่</button>
+  <div style="display:flex; gap:10px; margin-left:auto;">
+    <button class="btn-upload-nav" onclick="openUpload()">⬆ อัพโหลดไฟล์ใหม่</button>
+    <button class="btn-upload-nav" style="background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.2);" onclick="logout()">ออกจากระบบ</button>
+  </div>
 </nav>
 
 <!-- ======== PAGE 1: TRAFFIC / REVENUE ======== -->
@@ -566,8 +581,57 @@ footer { text-align: center; margin-top: 60px; font-size: 13px; color: var(--mut
 <footer>Studio 7 Internal Dashboard · Cal Daily Check Prism + POS April 2026 · May 2026</footer>
 </div>
 
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="auth-screen">
+  <div class="auth-panel">
+    <div class="landing-logo" style="margin: 0 auto 24px; box-shadow: 0 4px 12px var(--acc-glow);">S7</div>
+    <h2 style="margin-bottom:8px; color:var(--txt);">Traffic Dashboard</h2>
+    <p style="color:var(--mut); font-size:13px; margin-bottom:32px;">ลงชื่อเข้าใช้ หรือ สมัครสมาชิกเพื่อเข้าใช้งาน</p>
+    
+    <div>
+      <label class="auth-label">Username</label>
+      <input type="text" id="login-user" class="auth-input" placeholder="กรอก Username">
+      
+      <label class="auth-label">Password</label>
+      <input type="password" id="login-pass" class="auth-input" placeholder="กรอก Password">
+    </div>
+    
+    <div id="login-err" style="font-size:13px; margin-bottom:16px; display:none;"></div>
+    
+    <div style="display:flex; gap:12px;">
+      <button onclick="handleLogin()" class="auth-btn primary">เข้าสู่ระบบ</button>
+      <button onclick="handleRegister()" class="auth-btn secondary">สมัครสมาชิก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN SCREEN -->
+<div id="admin-screen" class="auth-screen" style="display:none; justify-content:flex-start; padding:40px 24px;">
+  <div style="max-width:1000px; width:100%;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
+      <h2 style="color:var(--txt);">ระบบจัดการผู้ใช้งาน (Admin Panel)</h2>
+      <div style="display:flex; gap:12px;">
+        <button onclick="goToUpload()" class="auth-btn primary" style="padding:10px 20px;">ไปยังหน้า Upload</button>
+        <button onclick="logout()" class="auth-btn" style="background:rgba(239,68,68,0.1); color:#ef4444; padding:10px 20px;">ออกจากระบบ</button>
+      </div>
+    </div>
+    
+    <div class="panel">
+      <div style="overflow-x:auto;">
+        <table class="tbl">
+          <thead>
+            <tr><th>Username</th><th>สถานะ</th><th>เข้าสู่ระบบล่าสุด</th><th class="r">เวลาใช้งานสะสม (นาที)</th><th class="r">จัดการ</th></tr>
+          </thead>
+          <tbody id="admin-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LANDING SCREEN -->
 <div id="landing-screen">
+  <button onclick="logout()" style="position:absolute; top:24px; right:24px; background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); padding:8px 16px; border-radius:24px; cursor:pointer; font-weight:600; font-family:inherit; z-index:2;">ออกจากระบบ</button>
   <div class="landing-logo">S7</div>
   <div class="landing-title">Traffic Dashboard</div>
   <div class="landing-sub">Cal Daily Check Prism · POS Sales Analytics</div>
@@ -1847,6 +1911,119 @@ function rebuildDropdowns(){
     opt.textContent=b.display_name; sel2.appendChild(opt);
   });
 }
+// ============================================================
+// AUTHENTICATION & ADMIN SYSTEM
+// ============================================================
+let USERS = JSON.parse(localStorage.getItem('s7_users')) || [];
+let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
+let SESSION_START = null;
+
+if(!USERS.find(u=>u.username==='admin')){
+  USERS.push({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
+  localStorage.setItem('s7_users', JSON.stringify(USERS));
+}
+
+function saveUsers(){ localStorage.setItem('s7_users', JSON.stringify(USERS)); }
+
+function authInit(){
+  if(CUR_USER){
+    SESSION_START = Date.now();
+    CUR_USER.lastLogin = new Date().toISOString(); saveUsers();
+    if(CUR_USER.role === 'admin') showAdminScreen();
+    else showUploadScreen();
+  } else {
+    document.getElementById('login-screen').style.display='flex';
+  }
+}
+
+function handleLogin(){
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value.trim();
+  const err = document.getElementById('login-err');
+  err.style.display='none';
+  if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  
+  const user = USERS.find(x => x.username===u && x.password===p);
+  if(!user){ err.textContent = 'Username หรือ Password ไม่ถูกต้อง'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  if(user.role !== 'admin' && user.status !== 'approved') { err.textContent = 'บัญชีรอการอนุมัติจาก Admin'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  
+  user.lastLogin = new Date().toISOString(); saveUsers();
+  CUR_USER = user; localStorage.setItem('s7_cur_user', JSON.stringify(user));
+  SESSION_START = Date.now();
+  if(user.role === 'admin') showAdminScreen();
+  else showUploadScreen();
+}
+
+function handleRegister(){
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value.trim();
+  const err = document.getElementById('login-err');
+  err.style.display='none';
+  if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  if(USERS.find(x=>x.username===u)){ err.textContent='Username นี้มีผู้ใช้งานแล้ว'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  
+  USERS.push({username:u, password:p, role:'user', status:'pending', lastLogin:null, totalMinutes:0});
+  saveUsers();
+  err.style.color = 'var(--a3)'; err.textContent = 'สมัครสำเร็จ! กรุณารอแอดมินอนุมัติ'; err.style.display='block';
+}
+
+function logout(){
+  updateSession();
+  CUR_USER = null; localStorage.removeItem('s7_cur_user');
+  document.getElementById('admin-screen').style.display='none';
+  document.getElementById('landing-screen').classList.remove('hidden');
+  document.getElementById('landing-screen').style.display='none';
+  document.querySelector('.wrap').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('login-user').value=''; document.getElementById('login-pass').value='';
+}
+
+function updateSession(){
+  if(CUR_USER && SESSION_START){
+    const mins = Math.floor((Date.now() - SESSION_START) / 60000);
+    if(mins > 0){
+      const u = USERS.find(x=>x.username===CUR_USER.username);
+      if(u) { u.totalMinutes = (u.totalMinutes||0) + mins; saveUsers(); SESSION_START = Date.now(); }
+    }
+  }
+}
+setInterval(updateSession, 60000);
+
+function showAdminScreen(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('landing-screen').style.display='none';
+  document.querySelector('.wrap').style.display='none';
+  document.getElementById('admin-screen').style.display='flex';
+  renderAdminTable();
+}
+
+function showUploadScreen(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('admin-screen').style.display='none';
+  document.getElementById('landing-screen').style.display='flex';
+  document.querySelector('.wrap').style.display='none';
+}
+function goToUpload(){ showUploadScreen(); }
+
+function renderAdminTable(){
+  const tb = document.getElementById('admin-tbody');
+  tb.innerHTML = USERS.filter(u=>u.role!=='admin').map((u)=>{
+    const st = u.status === 'approved' ? '<span style="color:var(--a3);font-weight:600;">อนุมัติแล้ว</span>' : '<span style="color:var(--gld);font-weight:600;">รออนุมัติ</span>';
+    const btn = u.status === 'pending' ? `<button onclick="approveUser('${u.username}')" class="auth-btn primary" style="padding:6px 12px;">อนุมัติ</button>` : `<button onclick="deleteUser('${u.username}')" class="auth-btn" style="background:rgba(239,68,68,0.1);color:#ef4444;padding:6px 12px;">ลบ</button>`;
+    const last = u.lastLogin ? new Date(u.lastLogin).toLocaleString('th-TH') : 'ยังไม่เคยเข้าใช้';
+    return `<tr><td>${u.username}</td><td>${st}</td><td>${last}</td><td class="r">${u.totalMinutes||0}</td><td class="r">${btn}</td></tr>`;
+  }).join('');
+  if(tb.innerHTML==='') tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--mut);">ยังไม่มีผู้สมัครเข้าใช้งาน</td></tr>';
+}
+
+function approveUser(un){ const u=USERS.find(x=>x.username===un); if(u){ u.status='approved'; saveUsers(); renderAdminTable(); } }
+function deleteUser(un){ if(confirm('ยืนยันลบผู้ใช้ '+un+'?')){ USERS=USERS.filter(x=>x.username!==un); saveUsers(); renderAdminTable(); } }
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('landing-screen').style.display='none';
+  document.querySelector('.wrap').style.display='none';
+  authInit();
+});
 </script>
 </body>
 </html>
