@@ -1256,9 +1256,9 @@ function buildABrChart(b,cat,cc,tMap){
   ]},options:COPT});
 }
 
-// ---- INIT ----
-applyR();
-renderApple('iPhone',gfA());
+// ---- INIT ---- (wrapped to prevent blocking auth system)
+try { applyR(); } catch(e){ console.warn('applyR init skipped:', e); }
+try { renderApple('iPhone',gfA()); } catch(e){ console.warn('renderApple init skipped:', e); }
 
 // ============================================================
 // DUCKDB ENGINE
@@ -2019,11 +2019,19 @@ function renderAdminTable(){
 function approveUser(un){ const u=USERS.find(x=>x.username===un); if(u){ u.status='approved'; saveUsers(); renderAdminTable(); } }
 function deleteUser(un){ if(confirm('ยืนยันลบผู้ใช้ '+un+'?')){ USERS=USERS.filter(x=>x.username!==un); saveUsers(); renderAdminTable(); } }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Run auth on DOMContentLoaded — this MUST fire
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('landing-screen').style.display='none';
+    document.querySelector('.wrap').style.display='none';
+    authInit();
+  });
+} else {
+  // DOM already loaded (script ran late)
   document.getElementById('landing-screen').style.display='none';
   document.querySelector('.wrap').style.display='none';
   authInit();
-});
+}
 </script>
 </body>
 </html>
