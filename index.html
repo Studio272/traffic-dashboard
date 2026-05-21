@@ -1392,7 +1392,62 @@ function updateDbStatus(hasDb){
 // ============================================================
 // UPLOAD & EXCEL PARSING ENGINE
 // ============================================================
-let uploadedFiles = [];   // {file, wb, sheets, role, selectedSheet}
+
+// --- Excel Web Worker ---
+const excelWorkerCode = `
+importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+let wbCache = {};
+self.onmessage = function(e) {
+  const { id, action, ab, sheetNames, options } = e.data;
+  try {
+    if (action === 'load') {
+      const wb = XLSX.read(ab, { type: 'array', cellDates: true });
+      wbCache[id] = wb;
+      self.postMessage({ id, action: 'load_done', sheets: wb.SheetNames });
+    } else if (action === 'get_json') {
+      const wb = wbCache[id];
+      if (!wb) throw new Error("Workbook not found in worker");
+      let allRows = {};
+      const sheetsToRead = sheetNames || [];
+      for(const sName of sheetsToRead) {
+        const ws = wb.Sheets[sName];
+        if (ws) {
+          const opts = (options && options[sName]) ? options[sName] : { defval: null, cellDates: true };
+          allRows[sName] = XLSX.utils.sheet_to_json(ws, opts);
+        }
+      }
+      self.postMessage({ id, action: 'json_done', allRows });
+    } else if (action === 'cleanup') {
+      delete wbCache[id];
+    }
+  } catch(err) {
+    self.postMessage({ id, error: err.message });
+  }
+};
+`;
+const workerBlob = new Blob([excelWorkerCode], { type: 'application/javascript' });
+const excelWorker = new Worker(URL.createObjectURL(workerBlob));
+let workerPromises = {};
+let workerMsgId = 0;
+
+excelWorker.onmessage = function(e) {
+  const { id, error } = e.data;
+  if (workerPromises[id]) {
+    if (error) workerPromises[id].reject(new Error(error));
+    else workerPromises[id].resolve(e.data);
+    delete workerPromises[id];
+  }
+};
+
+function runWorkerTask(data, transferList = []) {
+  return new Promise((resolve, reject) => {
+    const id = ++workerMsgId;
+    workerPromises[id] = { resolve, reject };
+    excelWorker.postMessage({ id, ...data }, transferList);
+  });
+}
+
+let uploadedFiles = [];   // {file, workerId, sheets, role, selectedSheet}
 
 // --- Modal open/close ---
 function openUpload(){
@@ -1444,11 +1499,11 @@ async function handleFiles(files){
         entry.status = 'ready';
       } else {
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(ab, {type:'array', cellDates:true});
-        entry.wb = wb;
-        entry.sheets = wb.SheetNames;
-        entry.selectedSheet = wb.SheetNames[0];
-        entry.role = detectRole(file.name, wb.SheetNames);
+        const res = await runWorkerTask({ action: 'load', ab }, [ab]);
+        entry.workerId = res.id;
+        entry.sheets = res.sheets;
+        entry.selectedSheet = res.sheets[0];
+        entry.role = detectRole(file.name, res.sheets);
         entry.status = 'ready';
       }
     } catch(err){
@@ -1533,6 +1588,8 @@ function renderFileList(){
 }
 
 function removeFile(i){
+  const entry = uploadedFiles[i];
+  if (entry && entry.workerId) runWorkerTask({ id: entry.workerId, action: 'cleanup' });
   uploadedFiles.splice(i,1);
   renderFileList();
   updateLoadBtn();
@@ -1568,27 +1625,46 @@ async function loadData(){
         continue;
       }
       // Try to get Data sheet + Cal sheet from the workbook regardless of selectedSheet
-      const dataSheetName = pf.wb.SheetNames.find(s=>s==='Data'||s.toLowerCase()==='data');
-      const calSheetName  = pf.wb.SheetNames.find(s=>s.toLowerCase().includes('cal daily'));
+      const dataSheetName = pf.sheets.find(s=>s==='Data'||s.toLowerCase()==='data');
+      const calSheetName  = pf.sheets.find(s=>s.toLowerCase().includes('cal daily'));
+
+      const sheetsToRead = [];
+      const options = {};
+      if (dataSheetName) sheetsToRead.push(dataSheetName);
+      if (calSheetName && !calData) {
+        sheetsToRead.push(calSheetName);
+        options[calSheetName] = { header: 1, defval: null };
+      }
+      if (!dataSheetName && !calSheetName) {
+        sheetsToRead.push(pf.selectedSheet);
+        options[pf.selectedSheet] = { defval: null, cellDates: true, header: 1 }; // try header 1 for fallback check too, actually better to just fetch normally and we can check headers.
+      }
+
+      // We'll just fetch normally first. But fallback check needs both styles if we are unsure.
+      // Actually let's fetch normally for fallback:
+      if (!dataSheetName && !calSheetName) {
+         options[pf.selectedSheet] = { defval: null, cellDates: true };
+      }
+
+      const res = await runWorkerTask({ id: pf.workerId, action: 'get_json', sheetNames: sheetsToRead, options });
+      const allRows = res.allRows;
 
       if(dataSheetName){
-        const rows = XLSX.utils.sheet_to_json(pf.wb.Sheets[dataSheetName],{defval:null,cellDates:true});
-        prismData = prismData.concat(parseDataSheet(rows));
+        prismData = prismData.concat(parseDataSheet(allRows[dataSheetName]));
       }
       if(calSheetName && !calData){
-        const raw = XLSX.utils.sheet_to_json(pf.wb.Sheets[calSheetName],{header:1,defval:null});
-        calData = parseCalSheet(raw);
+        calData = parseCalSheet(allRows[calSheetName]);
       }
 
       // Fallback: use selected sheet if neither found
       if(!dataSheetName && !calSheetName){
-        const ws = pf.wb.Sheets[pf.selectedSheet];
-        const rows = XLSX.utils.sheet_to_json(ws,{defval:null,cellDates:true});
-        if(rows.length>0 && (rows[0]['entry COUNT']!==undefined||rows[0]['Site Name']!==undefined)){
+        const rows = allRows[pf.selectedSheet];
+        if(rows && rows.length>0 && (rows[0]['entry COUNT']!==undefined||rows[0]['Site Name']!==undefined)){
           prismData = prismData.concat(parseDataSheet(rows));
-        } else if(rows.length>0 && rows[0]['Apple ID']!==undefined){
-          const raw = XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
-          if(!calData) calData = parseCalSheet(raw);
+        } else if(rows && rows.length>0 && rows[0]['Apple ID']!==undefined){
+          // If it needs header:1 we must re-fetch it from worker because we fetched it with default options above
+          const res2 = await runWorkerTask({ id: pf.workerId, action: 'get_json', sheetNames: [pf.selectedSheet], options: { [pf.selectedSheet]: {header:1, defval:null} } });
+          if(!calData) calData = parseCalSheet(res2.allRows[pf.selectedSheet]);
         }
       }
     }
@@ -1609,11 +1685,13 @@ async function loadData(){
         continue;
       }
       // Try every sheet in the workbook, not just selectedSheet
-      const sheetsToTry = sf.wb.SheetNames;
+      const sheetsToTry = sf.sheets;
+      const res = await runWorkerTask({ id: sf.workerId, action: 'get_json', sheetNames: sheetsToTry });
+      const allRows = res.allRows;
+
       for(const sheetName of sheetsToTry){
-        const ws = sf.wb.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(ws,{defval:null,cellDates:true});
-        if(rows.length===0) continue;
+        const rows = allRows[sheetName];
+        if(!rows || rows.length===0) continue;
         // Detect if this looks like sales data (has Branch or Doc Date column)
         const firstRow = rows[0];
         const hasBranch = 'Branch (Name)' in firstRow || 'Branch' in firstRow || 'สาขา' in firstRow;
