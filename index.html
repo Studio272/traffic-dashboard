@@ -591,10 +591,10 @@ footer { text-align: center; margin-top: 60px; font-size: 13px; color: var(--mut
     
     <div>
       <label class="auth-label">Username</label>
-      <input type="text" id="login-user" class="auth-input" placeholder="กรอก Username">
+      <input type="text" id="login-user" class="auth-input" placeholder="กรอก Username" onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
       
       <label class="auth-label">Password</label>
-      <input type="password" id="login-pass" class="auth-input" placeholder="กรอก Password">
+      <input type="password" id="login-pass" class="auth-input" placeholder="กรอก Password" onkeydown="if(event.key==='Enter') handleLogin()">
     </div>
     
     <div id="login-err" style="font-size:13px; margin-bottom:16px; display:none;"></div>
