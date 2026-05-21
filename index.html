@@ -1394,19 +1394,20 @@ function updateDbStatus(hasDb){
 // ============================================================
 
 // --- Excel Web Worker ---
+// Uses separate `msgId` (promise correlation) and `cacheKey` (workbook storage)
 const excelWorkerCode = `
 importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
 let wbCache = {};
 self.onmessage = function(e) {
-  const { id, action, ab, sheetNames, options } = e.data;
+  const { msgId, action, cacheKey, ab, sheetNames, options } = e.data;
   try {
     if (action === 'load') {
       const wb = XLSX.read(ab, { type: 'array', cellDates: true });
-      wbCache[id] = wb;
-      self.postMessage({ id, action: 'load_done', sheets: wb.SheetNames });
+      wbCache[cacheKey] = wb;
+      self.postMessage({ msgId, action: 'load_done', cacheKey, sheets: wb.SheetNames });
     } else if (action === 'get_json') {
-      const wb = wbCache[id];
-      if (!wb) throw new Error("Workbook not found in worker");
+      const wb = wbCache[cacheKey];
+      if (!wb) throw new Error("Workbook not found in worker for key=" + cacheKey);
       let allRows = {};
       const sheetsToRead = sheetNames || [];
       for(const sName of sheetsToRead) {
@@ -1416,12 +1417,13 @@ self.onmessage = function(e) {
           allRows[sName] = XLSX.utils.sheet_to_json(ws, opts);
         }
       }
-      self.postMessage({ id, action: 'json_done', allRows });
+      self.postMessage({ msgId, action: 'json_done', allRows });
     } else if (action === 'cleanup') {
-      delete wbCache[id];
+      delete wbCache[cacheKey];
+      self.postMessage({ msgId, action: 'cleanup_done' });
     }
   } catch(err) {
-    self.postMessage({ id, error: err.message });
+    self.postMessage({ msgId, error: err.message });
   }
 };
 `;
@@ -1429,25 +1431,30 @@ const workerBlob = new Blob([excelWorkerCode], { type: 'application/javascript' 
 const excelWorker = new Worker(URL.createObjectURL(workerBlob));
 let workerPromises = {};
 let workerMsgId = 0;
+let workerCacheId = 0;
 
 excelWorker.onmessage = function(e) {
-  const { id, error } = e.data;
-  if (workerPromises[id]) {
-    if (error) workerPromises[id].reject(new Error(error));
-    else workerPromises[id].resolve(e.data);
-    delete workerPromises[id];
+  const { msgId, error } = e.data;
+  if (workerPromises[msgId]) {
+    if (error) workerPromises[msgId].reject(new Error(error));
+    else workerPromises[msgId].resolve(e.data);
+    delete workerPromises[msgId];
   }
 };
 
+// Send a task to the worker. `data` should contain `action` and optionally `cacheKey`.
 function runWorkerTask(data, transferList = []) {
   return new Promise((resolve, reject) => {
-    const id = ++workerMsgId;
-    workerPromises[id] = { resolve, reject };
-    excelWorker.postMessage({ id, ...data }, transferList);
+    const msgId = ++workerMsgId;
+    workerPromises[msgId] = { resolve, reject };
+    excelWorker.postMessage({ msgId, ...data }, transferList);
   });
 }
 
-let uploadedFiles = [];   // {file, workerId, sheets, role, selectedSheet}
+// Generate a unique cache key for storing a workbook inside the worker
+function newCacheKey() { return 'wb_' + (++workerCacheId); }
+
+let uploadedFiles = [];   // {file, cacheKey, sheets, role, selectedSheet}
 
 // --- Modal open/close ---
 function openUpload(){
@@ -1499,8 +1506,9 @@ async function handleFiles(files){
         entry.status = 'ready';
       } else {
         const ab = await file.arrayBuffer();
-        const res = await runWorkerTask({ action: 'load', ab }, [ab]);
-        entry.workerId = res.id;
+        const ck = newCacheKey();
+        const res = await runWorkerTask({ action: 'load', cacheKey: ck, ab }, [ab]);
+        entry.cacheKey = ck;
         entry.sheets = res.sheets;
         entry.selectedSheet = res.sheets[0];
         entry.role = detectRole(file.name, res.sheets);
@@ -1589,7 +1597,7 @@ function renderFileList(){
 
 function removeFile(i){
   const entry = uploadedFiles[i];
-  if (entry && entry.workerId) runWorkerTask({ id: entry.workerId, action: 'cleanup' });
+  if (entry && entry.cacheKey) runWorkerTask({ action: 'cleanup', cacheKey: entry.cacheKey });
   uploadedFiles.splice(i,1);
   renderFileList();
   updateLoadBtn();
@@ -1646,7 +1654,7 @@ async function loadData(){
          options[pf.selectedSheet] = { defval: null, cellDates: true };
       }
 
-      const res = await runWorkerTask({ id: pf.workerId, action: 'get_json', sheetNames: sheetsToRead, options });
+      const res = await runWorkerTask({ action: 'get_json', cacheKey: pf.cacheKey, sheetNames: sheetsToRead, options });
       const allRows = res.allRows;
 
       if(dataSheetName){
@@ -1663,7 +1671,7 @@ async function loadData(){
           prismData = prismData.concat(parseDataSheet(rows));
         } else if(rows && rows.length>0 && rows[0]['Apple ID']!==undefined){
           // If it needs header:1 we must re-fetch it from worker because we fetched it with default options above
-          const res2 = await runWorkerTask({ id: pf.workerId, action: 'get_json', sheetNames: [pf.selectedSheet], options: { [pf.selectedSheet]: {header:1, defval:null} } });
+          const res2 = await runWorkerTask({ action: 'get_json', cacheKey: pf.cacheKey, sheetNames: [pf.selectedSheet], options: { [pf.selectedSheet]: {header:1, defval:null} } });
           if(!calData) calData = parseCalSheet(res2.allRows[pf.selectedSheet]);
         }
       }
@@ -1686,7 +1694,7 @@ async function loadData(){
       }
       // Try every sheet in the workbook, not just selectedSheet
       const sheetsToTry = sf.sheets;
-      const res = await runWorkerTask({ id: sf.workerId, action: 'get_json', sheetNames: sheetsToTry });
+      const res = await runWorkerTask({ action: 'get_json', cacheKey: sf.cacheKey, sheetNames: sheetsToTry });
       const allRows = res.allRows;
 
       for(const sheetName of sheetsToTry){
