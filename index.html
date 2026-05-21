@@ -1937,13 +1937,13 @@ function authInit(){
 }
 
 function handleLogin(){
-  const u = document.getElementById('login-user').value.trim();
+  const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value.trim();
   const err = document.getElementById('login-err');
   err.style.display='none';
   if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
-  const user = USERS.find(x => x.username===u && x.password===p);
+  const user = USERS.find(x => x.username.toLowerCase()===u && x.password===p);
   if(!user){ err.textContent = 'Username หรือ Password ไม่ถูกต้อง'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   if(user.role !== 'admin' && user.status !== 'approved') { err.textContent = 'บัญชีรอการอนุมัติจาก Admin'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
@@ -1955,12 +1955,12 @@ function handleLogin(){
 }
 
 function handleRegister(){
-  const u = document.getElementById('login-user').value.trim();
+  const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value.trim();
   const err = document.getElementById('login-err');
   err.style.display='none';
   if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
-  if(USERS.find(x=>x.username===u)){ err.textContent='Username นี้มีผู้ใช้งานแล้ว'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  if(USERS.find(x=>x.username.toLowerCase()===u)){ err.textContent='Username นี้มีผู้ใช้งานแล้ว'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
   USERS.push({username:u, password:p, role:'user', status:'pending', lastLogin:null, totalMinutes:0});
   saveUsers();
