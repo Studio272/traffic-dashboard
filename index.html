@@ -1918,10 +1918,12 @@ let USERS = JSON.parse(localStorage.getItem('s7_users')) || [];
 let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
 let SESSION_START = null;
 
-if(!USERS.find(u=>u.username==='admin')){
-  USERS.push({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
-  localStorage.setItem('s7_users', JSON.stringify(USERS));
-}
+if(!Array.isArray(USERS)) USERS = [];
+
+// Fix corrupted states from previous bugs by recreating the admin user
+USERS = USERS.filter(u => u.username.toLowerCase() !== 'admin');
+USERS.unshift({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
+localStorage.setItem('s7_users', JSON.stringify(USERS));
 
 function saveUsers(){ localStorage.setItem('s7_users', JSON.stringify(USERS)); }
 
