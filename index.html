@@ -1958,58 +1958,94 @@ function rebuildDropdowns(){
 // ============================================================
 // AUTHENTICATION & ADMIN SYSTEM
 // ============================================================
-let USERS = JSON.parse(localStorage.getItem('s7_users')) || [];
+const DB_URL = "https://jsonblob.com/api/jsonBlob/019e4de8-9102-7958-848f-2fc5245451b5";
+let USERS = [];
 let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
 let SESSION_START = null;
 
-if(!Array.isArray(USERS)) USERS = [];
+async function fetchUsers() {
+  try {
+    const res = await fetch(DB_URL);
+    if(res.ok) USERS = await res.json();
+  } catch(e) { console.error(e); }
+  if(!Array.isArray(USERS)) USERS = [];
+  if(!USERS.find(u=>u.username==='admin')) {
+    USERS.unshift({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
+  }
+}
 
-// Fix corrupted states from previous bugs by recreating the admin user
-USERS = USERS.filter(u => u.username.toLowerCase() !== 'admin');
-USERS.unshift({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
-localStorage.setItem('s7_users', JSON.stringify(USERS));
+async function saveUsers(){
+  try {
+    await fetch(DB_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(USERS)
+    });
+  } catch(e) { console.error(e); }
+}
 
-function saveUsers(){ localStorage.setItem('s7_users', JSON.stringify(USERS)); }
+async function authInit(){
+  const err = document.getElementById('login-err');
+  if(err) { err.textContent='กำลังเชื่อมต่อฐานข้อมูลส่วนกลาง...'; err.style.display='block'; err.style.color='var(--mut)'; }
+  await fetchUsers();
+  if(err) err.style.display='none';
 
-function authInit(){
   if(CUR_USER){
-    SESSION_START = Date.now();
-    CUR_USER.lastLogin = new Date().toISOString(); saveUsers();
-    if(CUR_USER.role === 'admin') showAdminScreen();
-    else showUploadScreen();
+    const dbUser = USERS.find(x=>x.username===CUR_USER.username);
+    if(dbUser && (dbUser.role==='admin' || dbUser.status==='approved')) {
+      CUR_USER = dbUser;
+      SESSION_START = Date.now();
+      CUR_USER.lastLogin = new Date().toISOString(); 
+      saveUsers(); // background save
+      if(CUR_USER.role === 'admin') showAdminScreen();
+      else showUploadScreen();
+    } else {
+      logout();
+    }
   } else {
     document.getElementById('login-screen').style.display='flex';
   }
 }
 
-function handleLogin(){
+async function handleLogin(){
   const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value.trim();
   const err = document.getElementById('login-err');
   err.style.display='none';
   if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
+  err.textContent='กำลังตรวจสอบ...'; err.style.color='var(--mut)'; err.style.display='block';
+  await fetchUsers(); // Get fresh data
+  
   const user = USERS.find(x => x.username.toLowerCase()===u && x.password===p);
   if(!user){ err.textContent = 'Username หรือ Password ไม่ถูกต้อง'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   if(user.role !== 'admin' && user.status !== 'approved') { err.textContent = 'บัญชีรอการอนุมัติจาก Admin'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
-  user.lastLogin = new Date().toISOString(); saveUsers();
+  user.lastLogin = new Date().toISOString(); 
+  await saveUsers();
+  
+  err.style.display='none';
   CUR_USER = user; localStorage.setItem('s7_cur_user', JSON.stringify(user));
   SESSION_START = Date.now();
   if(user.role === 'admin') showAdminScreen();
   else showUploadScreen();
 }
 
-function handleRegister(){
+async function handleRegister(){
   const u = document.getElementById('login-user').value.trim().toLowerCase();
   const p = document.getElementById('login-pass').value.trim();
   const err = document.getElementById('login-err');
   err.style.display='none';
   if(!u||!p){ err.textContent='กรุณากรอกข้อมูล'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
+  
+  err.textContent='กำลังลงทะเบียน...'; err.style.color='var(--mut)'; err.style.display='block';
+  await fetchUsers(); // Refresh before saving to avoid overwriting others
+  
   if(USERS.find(x=>x.username.toLowerCase()===u)){ err.textContent='Username นี้มีผู้ใช้งานแล้ว'; err.style.color='var(--pnk)'; err.style.display='block'; return; }
   
   USERS.push({username:u, password:p, role:'user', status:'pending', lastLogin:null, totalMinutes:0});
-  saveUsers();
+  await saveUsers();
+  
   err.style.color = 'var(--a3)'; err.textContent = 'สมัครสำเร็จ! กรุณารอแอดมินอนุมัติ'; err.style.display='block';
 }
 
@@ -2024,12 +2060,17 @@ function logout(){
   document.getElementById('login-user').value=''; document.getElementById('login-pass').value='';
 }
 
-function updateSession(){
+async function updateSession(){
   if(CUR_USER && SESSION_START){
     const mins = Math.floor((Date.now() - SESSION_START) / 60000);
     if(mins > 0){
+      await fetchUsers(); // get latest db
       const u = USERS.find(x=>x.username===CUR_USER.username);
-      if(u) { u.totalMinutes = (u.totalMinutes||0) + mins; saveUsers(); SESSION_START = Date.now(); }
+      if(u) { 
+        u.totalMinutes = (u.totalMinutes||0) + mins; 
+        await saveUsers(); 
+        SESSION_START = Date.now(); 
+      }
     }
   }
 }
@@ -2062,8 +2103,21 @@ function renderAdminTable(){
   if(tb.innerHTML==='') tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--mut);">ยังไม่มีผู้สมัครเข้าใช้งาน</td></tr>';
 }
 
-function approveUser(un){ const u=USERS.find(x=>x.username===un); if(u){ u.status='approved'; saveUsers(); renderAdminTable(); } }
-function deleteUser(un){ if(confirm('ยืนยันลบผู้ใช้ '+un+'?')){ USERS=USERS.filter(x=>x.username!==un); saveUsers(); renderAdminTable(); } }
+async function approveUser(un){ 
+  const btn = event.target; btn.textContent='รอสักครู่...'; btn.disabled=true;
+  await fetchUsers();
+  const u=USERS.find(x=>x.username===un); 
+  if(u){ u.status='approved'; await saveUsers(); renderAdminTable(); } 
+}
+async function deleteUser(un){ 
+  if(confirm('ยืนยันลบผู้ใช้ '+un+'?')){ 
+    const btn = event.target; btn.textContent='รอสักครู่...'; btn.disabled=true;
+    await fetchUsers();
+    USERS=USERS.filter(x=>x.username!==un); 
+    await saveUsers(); 
+    renderAdminTable(); 
+  } 
+}
 
 // Run auth on DOMContentLoaded — this MUST fire
 if(document.readyState === 'loading'){
