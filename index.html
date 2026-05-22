@@ -1981,7 +1981,6 @@ async function saveUsers(){
   try {
     await fetch(DB_URL, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(USERS)
     });
   } catch(e) { console.error(e); }
