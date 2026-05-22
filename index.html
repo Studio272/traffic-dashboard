@@ -591,10 +591,13 @@ footer { text-align: center; margin-top: 60px; font-size: 13px; color: var(--mut
     
     <div>
       <label class="auth-label">Username</label>
-      <input type="text" id="login-user" class="auth-input" placeholder="กรอก Username" onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()">
+      <input type="text" id="login-user" class="auth-input" placeholder="กรอก Username" onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()" autocomplete="off">
       
       <label class="auth-label">Password</label>
-      <input type="password" id="login-pass" class="auth-input" placeholder="กรอก Password" onkeydown="if(event.key==='Enter') handleLogin()">
+      <div style="position:relative;">
+        <input type="password" id="login-pass" class="auth-input" placeholder="กรอก Password" onkeydown="if(event.key==='Enter') handleLogin()" style="padding-right:40px;">
+        <button type="button" onclick="togglePass()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mut);margin-top:-8px;font-size:16px;">👁</button>
+      </div>
     </div>
     
     <div id="login-err" style="font-size:13px; margin-bottom:16px; display:none;"></div>
@@ -1965,7 +1968,7 @@ let SESSION_START = null;
 
 async function fetchUsers() {
   try {
-    const res = await fetch(DB_URL);
+    const res = await fetch(DB_URL + "?t=" + Date.now(), { cache: "no-store" });
     if(res.ok) USERS = await res.json();
   } catch(e) { console.error(e); }
   if(!Array.isArray(USERS)) USERS = [];
@@ -2117,6 +2120,12 @@ async function deleteUser(un){
     await saveUsers(); 
     renderAdminTable(); 
   } 
+}
+
+function togglePass(){
+  const p = document.getElementById('login-pass');
+  if(p.type === 'password') { p.type = 'text'; event.target.textContent = '🙈'; }
+  else { p.type = 'password'; event.target.textContent = '👁'; }
 }
 
 // Run auth on DOMContentLoaded — this MUST fire
