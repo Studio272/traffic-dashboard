@@ -1961,7 +1961,7 @@ function rebuildDropdowns(){
 // ============================================================
 // AUTHENTICATION & ADMIN SYSTEM
 // ============================================================
-const DB_URL = "https://jsonblob.com/api/jsonBlob/019e4de8-9102-7958-848f-2fc5245451b5";
+const DB_URL = "https://api.restful-api.dev/objects/ff8081819d82fab6019e4dfdff3066a8";
 let USERS = [];
 let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
 let SESSION_START = null;
@@ -1969,7 +1969,10 @@ let SESSION_START = null;
 async function fetchUsers() {
   try {
     const res = await fetch(DB_URL + "?t=" + Date.now(), { cache: "no-store" });
-    if(res.ok) USERS = await res.json();
+    if(res.ok) {
+      const dbData = await res.json();
+      if(dbData && dbData.data && dbData.data.users) USERS = dbData.data.users;
+    }
   } catch(e) { console.error(e); }
   if(!Array.isArray(USERS)) USERS = [];
   if(!USERS.find(u=>u.username==='admin')) {
@@ -1981,7 +1984,8 @@ async function saveUsers(){
   try {
     await fetch(DB_URL, {
       method: "PUT",
-      body: JSON.stringify(USERS)
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Studio7 Users", data: { users: USERS } })
     });
   } catch(e) { console.error(e); }
 }
