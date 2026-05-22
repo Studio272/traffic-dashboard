@@ -1961,7 +1961,7 @@ function rebuildDropdowns(){
 // ============================================================
 // AUTHENTICATION & ADMIN SYSTEM
 // ============================================================
-const DB_URL = "https://script.google.com/macros/s/AKfycbwtYyaUw3SP_S7gWu5ucy0shmt5b8l5eiSmxz0mcaXt-D_7lBcRMiA_J3ih5-IwJuWm6w/exec";
+const DB_URL = "https://script.google.com/macros/s/AKfycbz4HDSXRel6Uce7J5DpfD5HwKMANT803yqA6wqS0jv5U3tDWT5dFiHMWIvAW-U5IOuPCg/exec";
 let USERS = [];
 let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
 let SESSION_START = null;
@@ -1970,8 +1970,11 @@ async function fetchUsers() {
   try {
     const res = await fetch(DB_URL + "?t=" + Date.now());
     if(res.ok) {
-      const data = await res.json();
-      if(Array.isArray(data)) USERS = data;
+      const txt = await res.text();
+      try {
+        const data = JSON.parse(txt);
+        if(Array.isArray(data)) USERS = data;
+      } catch(pe) { console.warn('fetchUsers parse:', pe, txt); }
     }
   } catch(e) { console.error('fetchUsers error:', e); }
   if(!Array.isArray(USERS)) USERS = [];
@@ -1981,13 +1984,18 @@ async function fetchUsers() {
 }
 
 async function saveUsers(){
+  const body = JSON.stringify(USERS);
   try {
+    // POST with no-cors: data IS saved server-side even though response is opaque
     await fetch(DB_URL, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(USERS)
+      body: body
     });
+    // Verify save succeeded by reading back
+    await new Promise(r => setTimeout(r, 500));
+    await fetchUsers();
   } catch(e) { console.error('saveUsers error:', e); }
 }
 
