@@ -1961,19 +1961,19 @@ function rebuildDropdowns(){
 // ============================================================
 // AUTHENTICATION & ADMIN SYSTEM
 // ============================================================
-const DB_URL = "https://api.restful-api.dev/objects/ff8081819d82fab6019e4dfdff3066a8";
+const DB_URL = "https://script.google.com/macros/s/AKfycbwtYyaUw3SP_S7gWu5ucy0shmt5b8l5eiSmxz0mcaXt-D_7lBcRMiA_J3ih5-IwJuWm6w/exec";
 let USERS = [];
 let CUR_USER = JSON.parse(localStorage.getItem('s7_cur_user')) || null;
 let SESSION_START = null;
 
 async function fetchUsers() {
   try {
-    const res = await fetch(DB_URL + "?t=" + Date.now(), { cache: "no-store" });
+    const res = await fetch(DB_URL + "?t=" + Date.now());
     if(res.ok) {
-      const dbData = await res.json();
-      if(dbData && dbData.data && dbData.data.users) USERS = dbData.data.users;
+      const data = await res.json();
+      if(Array.isArray(data)) USERS = data;
     }
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error('fetchUsers error:', e); }
   if(!Array.isArray(USERS)) USERS = [];
   if(!USERS.find(u=>u.username==='admin')) {
     USERS.unshift({username:'admin', password:'1234', role:'admin', status:'approved', lastLogin:null, totalMinutes:0});
@@ -1983,11 +1983,12 @@ async function fetchUsers() {
 async function saveUsers(){
   try {
     await fetch(DB_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Studio7 Users", data: { users: USERS } })
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(USERS)
     });
-  } catch(e) { console.error(e); }
+  } catch(e) { console.error('saveUsers error:', e); }
 }
 
 async function authInit(){
